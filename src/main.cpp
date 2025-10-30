@@ -1,96 +1,106 @@
+#include "hit.hpp"
+#include "wireless.hpp"
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include <OneButton.h>
 
-#define NUM_PIXELS 3
-#define HIT_THRESHOLD 50
-#define BLINK_MS 50
+OneButton button(9, true); // GPIO9, 内部上拉
+bool g_click = false;
+bool g_long_click = false;
 
-// WS2812
-Adafruit_NeoPixel ws2812_front(NUM_PIXELS, 10, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel ws2812_right(NUM_PIXELS, 7, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel ws2812_left(NUM_PIXELS, 6, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel ws2812_back(NUM_PIXELS, 5, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel *ws2812s[4] = {
-    &ws2812_front,
-    &ws2812_right,
-    &ws2812_left,
-    &ws2812_back
-};
-
-// 压电片ADC
-const uint8_t adc_front_pin = 0;
-const uint8_t adc_right_pin = 1;
-const uint8_t adc_left_pin = 3;
-const uint8_t adc_back_pin = 4;
-const uint8_t adc_pins[4] = {
-    adc_front_pin,
-    adc_right_pin,
-    adc_left_pin,
-    adc_back_pin
-};
-
-// 按键
-const uint8_t key_pin = 9;
-
-const uint32_t RED = Adafruit_NeoPixel::Color(255, 0, 0);
-const uint32_t BLUE = Adafruit_NeoPixel::Color(0, 0, 255);
-uint32_t g_color = RED;
-
-void key_task(void *pvParameters) {
-    while (1) {
-        // 按下为低电平
-        if (!digitalRead(key_pin)) {
-            delay(10); // 消抖
-            
-            // 等待按键释放
-            while (!digitalRead(key_pin)) {
-                delay(1);
-            }
-            delay(10); // 消抖
-            
-            // 切换颜色
-            if (g_color == RED) {
-                g_color = BLUE;
-            } else if (g_color == BLUE) {
-                g_color = RED;
-            }
-        }
-        delay(1);
-    }
+void handleClick() {
+    Serial.println("短按");
+    g_click = true;
 }
+
+void handleDoubleClick() {
+    Serial.println("双按");
+}
+
+void handleLongPressStart() {
+    Serial.println("长按开始");
+    g_long_click = true;
+}
+
+void handleLongPressStop() {
+    Serial.println("长按结束");
+}
+
+void loop2(void *pvParameters);
 
 void setup() {
     Serial.begin(115200);
 
-    // 初始化WS2812
-    for (int i = 0; i < 4; i++) {
-        ws2812s[i]->begin();
-        ws2812s[i]->clear();
-        ws2812s[i]->show();
-    }
+    // 绑定回调函数
+    button.attachClick(handleClick);
+    button.attachDoubleClick(handleDoubleClick);
+    button.attachLongPressStart(handleLongPressStart);
+    button.attachLongPressStop(handleLongPressStop);
+    button.setClickMs(100); // 短按时间（毫秒）
+    button.setPressMs(800); // 长按时间（毫秒）
 
-    // 初始化按键
-    pinMode(key_pin, INPUT_PULLUP);
+    Hit::begin();
+    Wireless::begin();
 
-    // 按键任务
-    xTaskCreate(key_task, "key_task", 1024, NULL, 1, NULL);
+    xTaskCreate(loop2, "loop2", 8192, NULL, 1, NULL);
 }
 
 void loop() {
-    for (int i = 0; i < 4; i++) {
-        Adafruit_NeoPixel *ws2812 = ws2812s[i];
-        uint8_t adc = adc_pins[i];
+    Hit::onLoop();
+}
 
-        if (analogRead(adc) > HIT_THRESHOLD) {
-            ws2812->clear();
-            ws2812->show();
-            delay(BLINK_MS);
-            ws2812->fill(g_color, 0, NUM_PIXELS);
-            ws2812->show();
-        } else {
-            ws2812->clear();
-            ws2812->fill(g_color, 0, NUM_PIXELS);
-            ws2812->show();
+void app_onLoop() {
+    static Wireless::packet_t peer_packet_last;
+
+    // 颜色变化
+    if (Wireless::peer_packet.is_red != peer_packet_last.is_red) {
+        Hit::color = Wireless::peer_packet.is_red ? Hit::RED : Hit::BLUE;
+    }
+    // 击打次数变化
+    if (Wireless::peer_packet.hit_cnt != peer_packet_last.hit_cnt) {
+        Hit::last_hit_time =  millis() / 1000.0f;
+    }
+    peer_packet_last = Wireless::peer_packet;
+
+    // 发送自己的数据包
+    Wireless::my_packet.hit_cnt = Hit::hit_cnt;
+    Wireless::my_packet.is_red = (Hit::color == Hit::RED) ? 1 : 0;
+}
+
+void loop2(void *pvParameters) {
+    while (1) {
+        button.tick();
+        Wireless::onLoop();
+
+        if (!Wireless::is_pairing) { // 不在配对中
+            if (g_long_click) {      // 长按配对
+                Wireless::entryPairing();
+                Hit::detect_hit = false;
+            } else if (g_click) { // 短按切换颜色
+                if (Hit::color == Hit::RED) {
+                    Hit::color = Hit::BLUE;
+                } else {
+                    Hit::color = Hit::RED;
+                }
+            } else { // 正常运行业务逻辑
+                app_onLoop();
+            }
+        } else {           // 在配对中
+            if (g_click) { // 短按保存配对
+                Wireless::savePairing();
+                Hit::color = Hit::RED;
+                Hit::detect_hit = true;
+            } else {
+                if (Wireless::pairing_found) {
+                    Hit::color = Hit::GREEN;
+                } else {
+                    Hit::color = Hit::YELLOW;
+                }
+            }
         }
+
+        g_click = false;
+        g_long_click = false;
+
+        delay(10);
     }
 }
