@@ -9,17 +9,16 @@ class Hit {
     static uint32_t YELLOW;
 
     static uint32_t color;
-    static float blink_time;
     static bool detect_hit;
     static uint32_t hit_cnt;
-    static float last_hit_time;
+    static uint32_t last_hit_ms;
 
     static void begin();
     static void onLoop();
 
   private:
-    static constexpr auto HIT_THRESHOLD = 50;
-    static constexpr auto HIT_BLINK_TIME = 0.05f;
+    static constexpr auto HIT_THRESHOLD = 75;
+    static constexpr auto HIT_BLINK_MS = 50;
 
     static Adafruit_NeoPixel *ws2812s[4];
     static uint8_t adc_pins[4]; // 压电片ADC

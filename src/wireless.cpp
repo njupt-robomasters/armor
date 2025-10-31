@@ -1,17 +1,20 @@
 #include "wireless.hpp"
+#include <Preferences.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+
+extern Preferences preferences;
 
 // public
 Wireless::packet_t Wireless::my_packet, Wireless::peer_packet;
 bool Wireless::is_pairing = false;
 bool Wireless::pairing_found = false;
+uint32_t Wireless::last_receive_ms = 0;
 // private
 const uint8_t Wireless::empty_mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 const uint8_t Wireless::pairing_data[4] = {0x11, 0x45, 0x14, 0x00};
 esp_now_peer_info_t Wireless::broadcast_peer;
 esp_now_peer_info_t Wireless::peer;
-Preferences Wireless::preferences;
 
 void Wireless::begin() {
     WiFi.mode(WIFI_MODE_STA);
@@ -32,7 +35,6 @@ void Wireless::begin() {
     memset(broadcast_peer.peer_addr, 0xFF, 6);
     esp_now_add_peer(&broadcast_peer);
     
-    preferences.begin("wireless", false);
     if (preferences.isKey("peer_mac")) {
         preferences.getBytes("peer_mac", peer.peer_addr, 6);
         esp_now_add_peer(&peer);
@@ -82,14 +84,9 @@ void Wireless::onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len
             pairing_found = true;
         }
     } else if (memcmp(peer.peer_addr, mac_addr, 6) == 0) { // 是从配对设备发过来的
-        Serial.println("Message from paired device");
         if (data_len == sizeof(packet_t)) { // 数据长度正确
             memcpy(&peer_packet, data, sizeof(packet_t));
+            last_receive_ms = millis();
         }
     }
-}
-
-// 添加辅助函数用于调试
-void Wireless::printMac(const uint8_t *mac) {
-    Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }

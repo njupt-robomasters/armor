@@ -1,11 +1,10 @@
 #include <Arduino.h>
-#include <Preferences.h>
 #include <esp_now.h>
 
 class Wireless {
   public:
     struct alignas(1) packet_t {
-        uint8_t is_red = true;
+        uint32_t color = 0;
         uint32_t hit_cnt = 0;
         uint8_t dbus[10] = {0};
     };
@@ -13,6 +12,7 @@ class Wireless {
     static packet_t my_packet, peer_packet;
     static bool is_pairing;
     static bool pairing_found;
+    static uint32_t last_receive_ms;
 
     static void begin();
     static void entryPairing();
@@ -25,8 +25,6 @@ class Wireless {
 
     static esp_now_peer_info_t broadcast_peer;
     static esp_now_peer_info_t peer;
-    
-    static Preferences preferences;
 
     static void onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len);
 
