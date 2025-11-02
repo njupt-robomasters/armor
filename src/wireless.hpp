@@ -7,12 +7,14 @@ class Wireless {
         uint32_t color = 0;
         uint32_t hit_cnt = 0;
         uint8_t dbus[10] = {0};
+        int8_t rssi;
     };
-    
+
     static packet_t my_packet, peer_packet;
+    static uint32_t last_receive_ms;
+
     static bool is_pairing;
     static bool pairing_found;
-    static uint32_t last_receive_ms;
 
     static void begin();
     static void entryPairing();
@@ -28,5 +30,5 @@ class Wireless {
 
     static void onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len);
 
-    static void printMac(const uint8_t *mac);
+    static void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type);
 };

@@ -37,8 +37,6 @@ void serialEvent() {
     }
 }
 
-void loop2(void *pvParameters);
-
 void setup() {
     preferences.begin("armor", false);
 
@@ -54,6 +52,7 @@ void setup() {
     Hit::begin();
     Wireless::begin();
 
+    void loop2(void *pvParameters);
     xTaskCreate(loop2, "loop2", 8192, NULL, 1, NULL);
 }
 
@@ -61,9 +60,10 @@ void loop() {
     Hit::onLoop();
 }
 
-void app_onLoop() {
+void handle_wireless() {
     static Wireless::packet_t peer_packet_last;
 
+    // 处理收到的数据包
     // 颜色变化
     if (Wireless::peer_packet.color != peer_packet_last.color && Wireless::peer_packet.color != 0) {
         Hit::color = Wireless::peer_packet.color;
@@ -75,6 +75,15 @@ void app_onLoop() {
     }
     peer_packet_last = Wireless::peer_packet;
 
+    // 发送自己的数据包
+    Wireless::my_packet.color = Hit::color;
+    Wireless::my_packet.hit_cnt = Hit::hit_cnt;
+    if (millis() - g_last_cdc_receive_ms > TIMEOUT_MS) { // 超时数据清零
+        memset(Wireless::my_packet.dbus, 0, sizeof(Wireless::my_packet.dbus));
+    }
+}
+
+void handle_serial() {
     // 串口发送DBUS数据
     if (millis() - Wireless::last_receive_ms > TIMEOUT_MS) { // 超时数据清零
         memset(Wireless::peer_packet.dbus, 0, sizeof(Wireless::peer_packet.dbus));
@@ -82,17 +91,15 @@ void app_onLoop() {
     Serial0.write(Wireless::peer_packet.dbus, sizeof(Wireless::peer_packet.dbus));
     Serial0.flush();
 
-    // CDC发送颜色、击打次数、最后一条消息延迟
+    // CDC发送：颜色、击打次数、信号强度(tx, rx)、距离最后一次收到消息的毫秒数
     uint32_t latency_ms = millis() - Wireless::last_receive_ms;
-    Serial.printf("%d,%d,%d\n", Wireless::peer_packet.color, Wireless::peer_packet.hit_cnt, latency_ms);
+    Serial.printf("%d,%d,%d,%d,%d\n",
+                  Wireless::peer_packet.color,
+                  Wireless::peer_packet.hit_cnt,
+                  Wireless::peer_packet.rssi,
+                  Wireless::my_packet.rssi,
+                  latency_ms);
     Serial.flush();
-
-    // 发送自己的数据包
-    Wireless::my_packet.color = Hit::color;
-    Wireless::my_packet.hit_cnt = Hit::hit_cnt;
-    if (millis() - g_last_cdc_receive_ms > TIMEOUT_MS) { // 超时数据清零
-        memset(Wireless::my_packet.dbus, 0, sizeof(Wireless::my_packet.dbus));
-    }
 }
 
 void loop2(void *pvParameters) {
@@ -112,7 +119,8 @@ void loop2(void *pvParameters) {
                 }
                 preferences.putUInt("color", Hit::color);
             } else { // 正常运行业务逻辑
-                app_onLoop();
+                handle_wireless();
+                handle_serial();
             }
         } else {           // 在配对中
             if (g_click) { // 短按保存配对

@@ -7,9 +7,9 @@ extern Preferences preferences;
 
 // public
 Wireless::packet_t Wireless::my_packet, Wireless::peer_packet;
+uint32_t Wireless::last_receive_ms = 0;
 bool Wireless::is_pairing = false;
 bool Wireless::pairing_found = false;
-uint32_t Wireless::last_receive_ms = 0;
 // private
 const uint8_t Wireless::empty_mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 const uint8_t Wireless::pairing_data[4] = {0x11, 0x45, 0x14, 0x00};
@@ -17,8 +17,11 @@ esp_now_peer_info_t Wireless::broadcast_peer;
 esp_now_peer_info_t Wireless::peer;
 
 void Wireless::begin() {
+    // 使用 WiFi STA 接口运行 ESP-NOW 协议栈
     WiFi.mode(WIFI_MODE_STA);
     WiFi.disconnect();
+
+    // 使用WiFi 14信道
     wifi_country_t config = {
         .cc = "JP",
         .schan = 1,
@@ -28,13 +31,21 @@ void Wireless::begin() {
     esp_wifi_set_country(&config);
     esp_wifi_set_channel(14, WIFI_SECOND_CHAN_NONE);
 
+    // 20dBm功率
+    esp_wifi_set_max_tx_power(84);
+
+    // 启用混杂模式，以获取发送方rssi
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_promiscuous_rx_cb(promiscuous_rx_cb);
+
+    // 初始化ESP-NOW
     esp_now_init();
     esp_now_register_recv_cb(onRecv);
 
     // 添加广播peer
     memset(broadcast_peer.peer_addr, 0xFF, 6);
     esp_now_add_peer(&broadcast_peer);
-    
+
     if (preferences.isKey("peer_mac")) {
         preferences.getBytes("peer_mac", peer.peer_addr, 6);
         esp_now_add_peer(&peer);
@@ -84,9 +95,37 @@ void Wireless::onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len
             pairing_found = true;
         }
     } else if (memcmp(peer.peer_addr, mac_addr, 6) == 0) { // 是从配对设备发过来的
-        if (data_len == sizeof(packet_t)) { // 数据长度正确
+        if (data_len == sizeof(packet_t)) {                // 数据长度正确
             memcpy(&peer_packet, data, sizeof(packet_t));
             last_receive_ms = millis();
         }
+    }
+}
+
+typedef struct {
+    unsigned frame_ctrl : 16;
+    unsigned duration_id : 16;
+    uint8_t addr1[6]; /* receiver address */
+    uint8_t addr2[6]; /* sender address */
+    uint8_t addr3[6]; /* filtering address */
+    unsigned sequence_ctrl : 16;
+    uint8_t addr4[6]; /* optional */
+} wifi_ieee80211_mac_hdr_t;
+
+typedef struct {
+    wifi_ieee80211_mac_hdr_t hdr;
+    uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
+} wifi_ieee80211_packet_t;
+
+void Wireless::promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
+    if (type != WIFI_PKT_MGMT)
+        return;
+    
+    const auto *ppkt = (wifi_promiscuous_pkt_t *)buf;
+    const auto *ipkt = (wifi_ieee80211_packet_t *)ppkt->payload;
+    const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+
+    if (memcmp(hdr->addr2, peer.peer_addr, 6) == 0) {
+        my_packet.rssi = ppkt->rx_ctrl.rssi;
     }
 }
