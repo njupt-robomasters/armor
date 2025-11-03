@@ -64,18 +64,15 @@ void Wireless::entryPairing() {
 
 void Wireless::savePairing() {
     if (pairing_found) {
-        // 写入flash
-        preferences.putBytes("peer_mac", peer.peer_addr, 6);
-
         // 添加peer
         esp_now_add_peer(&peer);
     } else {
-        // 配对失败，重新从flash中读取mac地址
-        if (preferences.isKey("peer_mac")) {
-            preferences.getBytes("peer_mac", peer.peer_addr, 6);
-            esp_now_add_peer(&peer);
-        }
+        // 配对失败，清空设备mac
+        memset(peer.peer_addr, 0x00, 6);
     }
+
+    // 写入flash
+    preferences.putBytes("peer_mac", peer.peer_addr, 6);
 
     is_pairing = false;
 }
