@@ -2,7 +2,8 @@
 #include <Preferences.h>
 #include <driver/adc.h>
 
-#define SAMPLE_LEN 1024
+static constexpr uint32_t SAMPLE_FREQ_HZ = 40000; // 这是总轮询采样率，每个通道的采样率只有1/4
+static constexpr uint32_t SAMPLE_LEN = 10e-3 * SAMPLE_FREQ_HZ * 4; // 10ms的采样数据
 
 extern Preferences preferences;
 
@@ -25,14 +26,14 @@ Adafruit_NeoPixel *Hit::ws2812s[4] = {
 };
 uint8_t Hit::adc_pins[4] = {0, 4, 3, 1}; // front, back, left, right
 
-static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, uint32_t sample_len) {
+static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, uint32_t sample_freq_hz, uint32_t sample_len) {
     // ADC配置
     uint32_t adc1_chan_mask = 0;
     for (int i = 0; i < channel_num; i++) {
         adc1_chan_mask |= BIT(channel[i]);
     }
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = sample_len * 2,
+        .max_store_buf_size = sample_len * 2, // 两倍缓冲区
         .conv_num_each_intr = sample_len,
         .adc1_chan_mask = adc1_chan_mask,
         .adc2_chan_mask = 0,
@@ -44,7 +45,7 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, uin
         .conv_limit_en = false,
         .conv_limit_num = 255,
         .pattern_num = channel_num,
-        .sample_freq_hz = 10000,
+        .sample_freq_hz = sample_freq_hz,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
@@ -70,7 +71,7 @@ void Hit::begin() {
 
     // 初始化ADC
     adc_channel_t channel[4] = {ADC_CHANNEL_0, ADC_CHANNEL_4, ADC_CHANNEL_3, ADC_CHANNEL_1};
-    continuous_adc_init(channel, sizeof(channel) / sizeof(adc_channel_t), SAMPLE_LEN);
+    continuous_adc_init(channel, sizeof(channel) / sizeof(adc_channel_t), SAMPLE_FREQ_HZ, SAMPLE_LEN);
     adc_digi_start();
 }
 
