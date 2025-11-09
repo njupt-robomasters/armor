@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <esp_now.h>
 
-class Wireless {
+class Air {
   public:
     struct alignas(1) packet_t {
         uint32_t color = 0;
@@ -11,7 +11,7 @@ class Wireless {
     };
 
     static packet_t my_packet, peer_packet;
-    static uint32_t last_receive_ms;
+    static uint32_t last_air_ms;
 
     static bool is_pairing;
     static bool pairing_found;

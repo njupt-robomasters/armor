@@ -1,8 +1,9 @@
-#include "hit.hpp"
-#include "wireless.hpp"
 #include <Arduino.h>
 #include <OneButton.h>
 #include <Preferences.h>
+
+#include "air.hpp"
+#include "hit.hpp"
 
 static constexpr auto TIMEOUT_MS = 100;
 
@@ -32,7 +33,7 @@ void serialEvent() {
         }
     }
     if (i == 10) {
-        memcpy(Wireless::my_packet.dbus, data, 10);
+        memcpy(Air::my_packet.dbus, data, 10);
         g_last_cdc_receive_ms = millis();
     }
 }
@@ -50,7 +51,7 @@ void setup() {
     button.setPressMs(500); // 长按时间（毫秒）
 
     Hit::begin();
-    Wireless::begin();
+    Air::begin();
 
     void loop2(void *pvParameters);
     xTaskCreate(loop2, "loop2", 8192, NULL, 1, NULL);
@@ -61,43 +62,43 @@ void loop() {
 }
 
 void handle_wireless() {
-    static Wireless::packet_t peer_packet_last;
+    static Air::packet_t peer_packet_last;
 
     // 处理收到的数据包
     // 颜色变化
-    if (Wireless::peer_packet.color != peer_packet_last.color && Wireless::peer_packet.color != 0) {
-        Hit::color = Wireless::peer_packet.color;
+    if (Air::peer_packet.color != peer_packet_last.color && Air::peer_packet.color != 0) {
+        Hit::color = Air::peer_packet.color;
         preferences.putUInt("color", Hit::color);
     }
     // 击打次数变化
-    if (Wireless::peer_packet.hit_cnt != peer_packet_last.hit_cnt) {
+    if (Air::peer_packet.hit_cnt != peer_packet_last.hit_cnt) {
         Hit::last_hit_ms = millis();
     }
-    peer_packet_last = Wireless::peer_packet;
+    peer_packet_last = Air::peer_packet;
 
     // 发送自己的数据包
-    Wireless::my_packet.color = Hit::color;
-    Wireless::my_packet.hit_cnt = Hit::hit_cnt;
+    Air::my_packet.color = Hit::color;
+    Air::my_packet.hit_cnt = Hit::hit_cnt;
     if (millis() - g_last_cdc_receive_ms > TIMEOUT_MS) { // 超时数据清零
-        memset(Wireless::my_packet.dbus, 0, sizeof(Wireless::my_packet.dbus));
+        memset(Air::my_packet.dbus, 0, sizeof(Air::my_packet.dbus));
     }
 }
 
 void handle_serial() {
     // 串口发送DBUS数据
-    if (millis() - Wireless::last_receive_ms > TIMEOUT_MS) { // 超时数据清零
-        memset(Wireless::peer_packet.dbus, 0, sizeof(Wireless::peer_packet.dbus));
+    if (millis() - Air::last_air_ms > TIMEOUT_MS) { // 超时数据清零
+        memset(Air::peer_packet.dbus, 0, sizeof(Air::peer_packet.dbus));
     }
-    Serial0.write(Wireless::peer_packet.dbus, sizeof(Wireless::peer_packet.dbus));
+    Serial0.write(Air::peer_packet.dbus, sizeof(Air::peer_packet.dbus));
     Serial0.flush();
 
     // CDC发送：颜色、击打次数、信号强度(tx, rx)、距离最后一次收到消息的毫秒数
-    uint32_t latency_ms = millis() - Wireless::last_receive_ms;
+    uint32_t latency_ms = millis() - Air::last_air_ms;
     Serial.printf("%d,%d,%d,%d,%d\n",
-                  Wireless::peer_packet.color,
-                  Wireless::peer_packet.hit_cnt,
-                  Wireless::peer_packet.rssi,
-                  Wireless::my_packet.rssi,
+                  Air::peer_packet.color,
+                  Air::peer_packet.hit_cnt,
+                  Air::peer_packet.rssi,
+                  Air::my_packet.rssi,
                   latency_ms);
     Serial.flush();
 }
@@ -105,11 +106,11 @@ void handle_serial() {
 void loop2(void *pvParameters) {
     while (1) {
         button.tick();
-        Wireless::onLoop();
+        Air::onLoop();
 
-        if (!Wireless::is_pairing) { // 不在配对中
-            if (g_long_click) {      // 长按配对
-                Wireless::entryPairing();
+        if (!Air::is_pairing) { // 不在配对中
+            if (g_long_click) { // 长按配对
+                Air::entryPairing();
                 Hit::detect_hit = false;
             } else if (g_click) { // 短按切换颜色
                 if (Hit::color == Hit::RED) {
@@ -124,12 +125,12 @@ void loop2(void *pvParameters) {
             }
         } else {           // 在配对中
             if (g_click) { // 短按保存配对
-                Wireless::savePairing();
+                Air::savePairing();
                 Hit::color = Hit::RED;
                 preferences.putUInt("color", Hit::color);
                 Hit::detect_hit = true;
             } else {
-                if (Wireless::pairing_found) {
+                if (Air::pairing_found) {
                     Hit::color = Hit::GREEN;
                 } else {
                     Hit::color = Hit::YELLOW;

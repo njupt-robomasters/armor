@@ -1,4 +1,5 @@
-#include "wireless.hpp"
+#include "air.hpp"
+
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -6,17 +7,17 @@
 extern Preferences preferences;
 
 // public
-Wireless::packet_t Wireless::my_packet, Wireless::peer_packet;
-uint32_t Wireless::last_receive_ms = 0;
-bool Wireless::is_pairing = false;
-bool Wireless::pairing_found = false;
+Air::packet_t Air::my_packet, Air::peer_packet;
+uint32_t Air::last_air_ms = 0;
+bool Air::is_pairing = false;
+bool Air::pairing_found = false;
 // private
-const uint8_t Wireless::empty_mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-const uint8_t Wireless::pairing_data[4] = {0x11, 0x45, 0x14, 0x00};
-esp_now_peer_info_t Wireless::broadcast_peer;
-esp_now_peer_info_t Wireless::peer;
+const uint8_t Air::empty_mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t Air::pairing_data[4] = {0x11, 0x45, 0x14, 0x00};
+esp_now_peer_info_t Air::broadcast_peer;
+esp_now_peer_info_t Air::peer;
 
-void Wireless::begin() {
+void Air::begin() {
     // 使用 WiFi STA 接口运行 ESP-NOW 协议栈
     WiFi.mode(WIFI_MODE_STA);
     WiFi.disconnect();
@@ -54,7 +55,7 @@ void Wireless::begin() {
     }
 }
 
-void Wireless::entryPairing() {
+void Air::entryPairing() {
     // 清除之前的配对
     esp_now_del_peer(peer.peer_addr);
 
@@ -62,7 +63,7 @@ void Wireless::entryPairing() {
     pairing_found = false;
 }
 
-void Wireless::savePairing() {
+void Air::savePairing() {
     if (pairing_found) {
         // 添加peer
         esp_now_add_peer(&peer);
@@ -77,7 +78,7 @@ void Wireless::savePairing() {
     is_pairing = false;
 }
 
-void Wireless::onLoop() {
+void Air::onLoop() {
     if (is_pairing) {
         esp_now_send(broadcast_peer.peer_addr, pairing_data, 4); // 发送配对请求
     } else if (memcmp(peer.peer_addr, empty_mac, 6) != 0) {      // 已有配对设备
@@ -85,7 +86,7 @@ void Wireless::onLoop() {
     }
 }
 
-void Wireless::onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+void Air::onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
     if (is_pairing) { // 在配对中
         if (data_len == 4 && memcmp(pairing_data, data, 4) == 0) {
             memcpy(peer.peer_addr, mac_addr, 6);
@@ -94,7 +95,7 @@ void Wireless::onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len
     } else if (memcmp(peer.peer_addr, mac_addr, 6) == 0) { // 是从配对设备发过来的
         if (data_len == sizeof(packet_t)) {                // 数据长度正确
             memcpy(&peer_packet, data, sizeof(packet_t));
-            last_receive_ms = millis();
+            last_air_ms = millis();
         }
     }
 }
@@ -114,10 +115,10 @@ typedef struct {
     uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
 } wifi_ieee80211_packet_t;
 
-void Wireless::promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
+void Air::promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     if (type != WIFI_PKT_MGMT)
         return;
-    
+
     const auto *ppkt = (wifi_promiscuous_pkt_t *)buf;
     const auto *ipkt = (wifi_ieee80211_packet_t *)ppkt->payload;
     const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;

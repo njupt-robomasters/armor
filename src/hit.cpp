@@ -2,7 +2,7 @@
 #include <Preferences.h>
 #include <driver/adc.h>
 
-static constexpr uint32_t SAMPLE_FREQ_HZ = 40000; // 这是总轮询采样率，每个通道的采样率只有1/4
+static constexpr uint32_t SAMPLE_FREQ_HZ = 40000;                  // 这是总轮询采样率，每个通道的采样率只有1/4
 static constexpr uint32_t SAMPLE_LEN = 10e-3 * SAMPLE_FREQ_HZ * 4; // 10ms的采样数据
 
 extern Preferences preferences;
