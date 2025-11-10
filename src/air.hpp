@@ -28,6 +28,8 @@ class Air {
     static esp_now_peer_info_t broadcast_peer;
     static esp_now_peer_info_t peer;
 
+    static int8_t pairing_best_rssi;
+
     static void onRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len);
 
     static void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type);
