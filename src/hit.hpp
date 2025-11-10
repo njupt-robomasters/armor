@@ -17,7 +17,7 @@ class Hit {
     static void onLoop();
 
   private:
-    static constexpr auto HIT_THRESHOLD = 1000;
+    static constexpr auto HIT_THRESHOLD = 1500;
     static constexpr auto HIT_BLINK_MS = 50;
 
     static Adafruit_NeoPixel *ws2812s[4];
