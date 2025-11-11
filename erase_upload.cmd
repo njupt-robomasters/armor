@@ -1,6 +1,11 @@
 esptool ^
 --chip esp32c3 ^
 --baud 460800 ^
+erase-flash
+
+esptool ^
+--chip esp32c3 ^
+--baud 460800 ^
 --before default-reset ^
 --after hard-reset ^
 write-flash -z ^
