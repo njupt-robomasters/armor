@@ -61,7 +61,7 @@ void loop() {
     Hit::onLoop();
 }
 
-void handle_wireless() {
+void handle_air() {
     static Air::packet_t peer_packet_last;
 
     // 处理收到的数据包
@@ -95,7 +95,7 @@ void handle_serial() {
     // CDC发送：颜色、击打次数、信号强度(tx, rx)、距离最后一次收到消息的毫秒数
     uint32_t latency_ms = millis() - Air::last_air_ms;
     Serial.printf("%d,%d,%d,%d,%d\n",
-                  Air::peer_packet.color,
+                  Air::my_packet.color,
                   Air::peer_packet.hit_cnt,
                   Air::peer_packet.rssi,
                   Air::my_packet.rssi,
@@ -120,7 +120,7 @@ void loop2(void *pvParameters) {
                 }
                 preferences.putUInt("color", Hit::color);
             } else { // 正常运行业务逻辑
-                handle_wireless();
+                handle_air();
                 handle_serial();
             }
         } else {           // 在配对中
